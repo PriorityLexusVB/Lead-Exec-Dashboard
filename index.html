@@ -427,8 +427,10 @@
         // Update metric with change indicator
         function updateMetricChange(elementId, value, isPositive = true) {
             const element = document.getElementById(elementId);
+            const percentageMetrics = ['leadsChange', 'conversionChange', 'revenueChange'];
+            const suffix = percentageMetrics.includes(elementId) ? '%' : '';
             element.className = `metric-change ${isPositive ? 'positive' : 'negative'}`;
-            element.textContent = (isPositive ? '+' : '') + value + (elementId.includes('Change') && !elementId.includes('campaigns') ? '%' : '');
+            element.textContent = (isPositive ? '+' : '') + value + suffix;
         }
 
         // Initialize dashboard
@@ -462,7 +464,7 @@
             dashboardData.totalLeads += Math.floor(Math.random() * 20) - 5;
             dashboardData.conversionRate = Math.max(0, Math.min(100, dashboardData.conversionRate + (Math.random() * 2 - 1)));
             dashboardData.activeCampaigns = Math.max(1, dashboardData.activeCampaigns + Math.floor(Math.random() * 3) - 1);
-            dashboardData.revenue += Math.floor(Math.random() * 5000) - 1000;
+            dashboardData.revenue = Math.max(0, dashboardData.revenue + Math.floor(Math.random() * 5000) - 1000);
             
             // Update lead sources with small variations
             dashboardData.leadsBySource.forEach(item => {
