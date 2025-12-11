@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Executive Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-title {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .metric-change {
+            font-size: 0.9em;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .metric-change.positive {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .metric-change.negative {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .chart-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-label {
+            width: 100px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .recent-activity {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .activity-item {
+            padding: 15px;
+            border-left: 3px solid #667eea;
+            margin-bottom: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .activity-time {
+            color: #999;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .activity-description {
+            color: #333;
+            font-size: 0.95em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-active {
+            background: #28a745;
+            box-shadow: 0 0 5px #28a745;
+        }
+
+        .status-pending {
+            background: #ffc107;
+            box-shadow: 0 0 5px #ffc107;
+        }
+
+        .status-inactive {
+            background: #dc3545;
+            box-shadow: 0 0 5px #dc3545;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 20px;
+        }
+
+        .refresh-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .refresh-btn:active {
+            transform: scale(0.98);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-section {
+                grid-template-columns: 1fr;
+            }
+
+            .bar-label {
+                width: 80px;
+                font-size: 0.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <h1>Lead Executive Dashboard</h1>
+            <p class="subtitle">Real-time performance metrics and analytics</p>
+        </header>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-title">Total Leads</div>
+                <div class="metric-value" id="totalLeads">0</div>
+                <span class="metric-change positive" id="leadsChange">+0%</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">Conversion Rate</div>
+                <div class="metric-value" id="conversionRate">0%</div>
+                <span class="metric-change positive" id="conversionChange">+0%</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">Active Campaigns</div>
+                <div class="metric-value" id="activeCampaigns">0</div>
+                <span class="metric-change positive" id="campaignsChange">+0</span>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-title">Revenue Generated</div>
+                <div class="metric-value" id="revenue">$0</div>
+                <span class="metric-change positive" id="revenueChange">+0%</span>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-card">
+                <h2 class="chart-title">Leads by Source</h2>
+                <div class="bar-chart" id="leadsBySource"></div>
+            </div>
+
+            <div class="chart-card">
+                <h2 class="chart-title">Lead Status Distribution</h2>
+                <div class="bar-chart" id="leadStatus"></div>
+            </div>
+        </div>
+
+        <div class="recent-activity">
+            <h2 class="chart-title">Recent Activity</h2>
+            <div id="activityList"></div>
+            <button class="refresh-btn" onclick="refreshData()">Refresh Dashboard</button>
+        </div>
+    </div>
+
+    <script>
+        // Sample data for the dashboard
+        const dashboardData = {
+            totalLeads: 1247,
+            leadsChange: 12.5,
+            conversionRate: 34.2,
+            conversionChange: 5.3,
+            activeCampaigns: 8,
+            campaignsChange: 2,
+            revenue: 184500,
+            revenueChange: 18.7,
+            leadsBySource: [
+                { source: 'Website', count: 456 },
+                { source: 'Email', count: 328 },
+                { source: 'Social Media', count: 289 },
+                { source: 'Referral', count: 174 }
+            ],
+            leadStatus: [
+                { status: 'New', count: 423 },
+                { status: 'Contacted', count: 356 },
+                { status: 'Qualified', count: 298 },
+                { status: 'Converted', count: 170 }
+            ],
+            recentActivity: [
+                { time: '2 minutes ago', description: 'New lead from website contact form', status: 'active' },
+                { time: '15 minutes ago', description: 'Email campaign "Summer Sale" sent to 500 contacts', status: 'active' },
+                { time: '1 hour ago', description: 'Lead qualification call scheduled with John Smith', status: 'pending' },
+                { time: '2 hours ago', description: 'Converted lead to customer - Deal value: $5,200', status: 'active' },
+                { time: '3 hours ago', description: 'New social media lead from LinkedIn', status: 'active' }
+            ]
+        };
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+
+        // Format number with commas
+        function formatNumber(num) {
+            return new Intl.NumberFormat('en-US').format(num);
+        }
+
+        // Animate number counting
+        function animateValue(element, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const value = Math.floor(progress * (end - start) + start);
+                
+                if (element.id === 'revenue') {
+                    element.textContent = formatCurrency(value);
+                } else if (element.id === 'conversionRate') {
+                    element.textContent = (progress * end).toFixed(1) + '%';
+                } else {
+                    element.textContent = formatNumber(value);
+                }
+                
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        // Create bar chart
+        function createBarChart(containerId, data, maxValue) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            data.forEach(item => {
+                const barItem = document.createElement('div');
+                barItem.className = 'bar-item';
+                
+                const label = document.createElement('div');
+                label.className = 'bar-label';
+                label.textContent = item.status || item.source;
+                
+                const barContainer = document.createElement('div');
+                barContainer.className = 'bar-container';
+                
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.style.width = '0%';
+                barFill.textContent = formatNumber(item.count);
+                
+                barContainer.appendChild(barFill);
+                barItem.appendChild(label);
+                barItem.appendChild(barContainer);
+                container.appendChild(barItem);
+                
+                // Animate bar width
+                setTimeout(() => {
+                    const percentage = (item.count / maxValue) * 100;
+                    barFill.style.width = percentage + '%';
+                }, 100);
+            });
+        }
+
+        // Create activity list
+        function createActivityList(activities) {
+            const container = document.getElementById('activityList');
+            container.innerHTML = '';
+            
+            activities.forEach(activity => {
+                const activityItem = document.createElement('div');
+                activityItem.className = 'activity-item';
+                
+                const time = document.createElement('div');
+                time.className = 'activity-time';
+                time.textContent = activity.time;
+                
+                const description = document.createElement('div');
+                description.className = 'activity-description';
+                description.innerHTML = `<span class="status-indicator status-${activity.status}"></span>${activity.description}`;
+                
+                activityItem.appendChild(time);
+                activityItem.appendChild(description);
+                container.appendChild(activityItem);
+            });
+        }
+
+        // Update metric with change indicator
+        function updateMetricChange(elementId, value, isPositive = true) {
+            const element = document.getElementById(elementId);
+            element.className = `metric-change ${isPositive ? 'positive' : 'negative'}`;
+            element.textContent = (isPositive ? '+' : '') + value + (elementId.includes('Change') && !elementId.includes('campaigns') ? '%' : '');
+        }
+
+        // Initialize dashboard
+        function initDashboard() {
+            // Animate metrics
+            animateValue(document.getElementById('totalLeads'), 0, dashboardData.totalLeads, 1500);
+            animateValue(document.getElementById('conversionRate'), 0, dashboardData.conversionRate, 1500);
+            animateValue(document.getElementById('activeCampaigns'), 0, dashboardData.activeCampaigns, 1500);
+            animateValue(document.getElementById('revenue'), 0, dashboardData.revenue, 1500);
+            
+            // Update change indicators
+            updateMetricChange('leadsChange', dashboardData.leadsChange);
+            updateMetricChange('conversionChange', dashboardData.conversionChange);
+            updateMetricChange('campaignsChange', dashboardData.campaignsChange);
+            updateMetricChange('revenueChange', dashboardData.revenueChange);
+            
+            // Create charts
+            const maxSourceCount = Math.max(...dashboardData.leadsBySource.map(item => item.count));
+            const maxStatusCount = Math.max(...dashboardData.leadStatus.map(item => item.count));
+            
+            createBarChart('leadsBySource', dashboardData.leadsBySource, maxSourceCount);
+            createBarChart('leadStatus', dashboardData.leadStatus, maxStatusCount);
+            
+            // Create activity list
+            createActivityList(dashboardData.recentActivity);
+        }
+
+        // Refresh data with random variations
+        function refreshData() {
+            // Add small random variations to demonstrate interactivity
+            dashboardData.totalLeads += Math.floor(Math.random() * 20) - 5;
+            dashboardData.conversionRate = Math.max(0, Math.min(100, dashboardData.conversionRate + (Math.random() * 2 - 1)));
+            dashboardData.activeCampaigns = Math.max(1, dashboardData.activeCampaigns + Math.floor(Math.random() * 3) - 1);
+            dashboardData.revenue += Math.floor(Math.random() * 5000) - 1000;
+            
+            // Update lead sources with small variations
+            dashboardData.leadsBySource.forEach(item => {
+                item.count = Math.max(0, item.count + Math.floor(Math.random() * 20) - 10);
+            });
+            
+            // Update lead status with small variations
+            dashboardData.leadStatus.forEach(item => {
+                item.count = Math.max(0, item.count + Math.floor(Math.random() * 15) - 7);
+            });
+            
+            // Add new activity
+            const newActivities = [
+                { time: 'Just now', description: 'New lead received from contact form', status: 'active' },
+                { time: 'Just now', description: 'Follow-up email sent to prospect', status: 'pending' },
+                { time: 'Just now', description: 'Meeting scheduled with qualified lead', status: 'pending' },
+                { time: 'Just now', description: 'Lead converted to customer', status: 'active' }
+            ];
+            
+            const randomActivity = newActivities[Math.floor(Math.random() * newActivities.length)];
+            dashboardData.recentActivity.unshift(randomActivity);
+            dashboardData.recentActivity = dashboardData.recentActivity.slice(0, 5);
+            
+            // Reinitialize dashboard
+            initDashboard();
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
