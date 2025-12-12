@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Priority Lexus - Executive View</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for dark mode feeling */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100">
+    <div id="root"></div>
+
+    <!-- Main Application Script -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        
+        // Recharts imports via ESM
+        import { 
+            AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+            ComposedChart, Line, BarChart, Bar, Cell, PieChart, Pie
+        } from 'https://esm.sh/recharts@2.12.2?deps=react@18.2.0,react-dom@18.2.0';
+
+        // Lucide React imports via ESM
+        import { 
+            TrendingUp, TrendingDown, Users, Activity, DollarSign, 
+            Target, Car, ChevronRight, Layers, 
+            Zap, FileText, X, ChevronDown, Filter, Wrench, Bell, HelpCircle,
+            BarChart2, PieChart as PieIcon, List, UploadCloud, RefreshCw, ArrowLeft, Calendar,
+            MousePointerClick
+        } from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
+
+        // --- CONFIGURATION ---
+        const VENDOR_KEYWORDS = [
+            'tradepending', 'eautoappraise', 'gubagoo', 'everest', 'pulsar', 'elead', 
+            'affinitiv', 'drivecentric', 'darwin', 'roadster', 'carnow', 'text2drive', 'podium'
+        ];
+
+        const EXCLUDED_PREFIXES = [
+            'Form leads', 'Phone leads', 'Chat leads', 
+            'Organic Search', 'Paid Search', 'Direct', 'Referral', 
+            'Email', 'Social', 'Display', 'Other',
+            'Sales > 757', 'Service > 757', 'Parts > 757', 
+            'Sales > Sales Mobile', 'Sales > Sales Desktop',
+            'Service > Service Mobile', 'Service > Service Desktop',
+            'Parts > Parts Desktop',
+            'Sales', 'Service', 'Parts', 'Return Shopper Alert'
+        ];
+
+        const COLORS = {
+            gold: '#B19B56',
+            green: '#10B981',
+            blue: '#3B82F6',
+            purple: '#8B5CF6',
+            amber: '#F59E0B',
+            slate: '#94A3B8'
+        };
+
+        const TAB_STYLES = {
+            sales: { label: 'Sales', icon: Car, colorClass: 'text-emerald-400', bgClass: 'bg-emerald-400/10', borderClass: 'border-emerald-500' },
+            service: { label: 'Service', icon: Wrench, colorClass: 'text-blue-400', bgClass: 'bg-blue-400/10', borderClass: 'border-blue-500' },
+            parts: { label: 'Parts', icon: Layers, colorClass: 'text-purple-400', bgClass: 'bg-purple-400/10', borderClass: 'border-purple-500' },
+            alerts: { label: 'Alerts', icon: Bell, colorClass: 'text-amber-400', bgClass: 'bg-amber-400/10', borderClass: 'border-amber-500' },
+        };
+
+        // --- PARSING LOGIC ---
+        const classifyDriver = (name) => {
+            const lower = name.toLowerCase();
+            if (VENDOR_KEYWORDS.some(k => lower.includes(k))) return 'vendor';
+            return 'form';
+        };
+
+        const parseCSV = (text) => {
+            const lines = text.split(/\r?\n/);
+            const datePattern = /(\d{4}-\d{2}-\d{2})/;
+            const monthlyData = {};
+
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                const dateMatch = line.match(datePattern);
+                if (!dateMatch) return;
+                
+                const dateStr = dateMatch[0];
+                const dateIndex = line.indexOf(dateStr);
+                const preDate = line.substring(0, dateIndex).trim();
+                const postDate = line.substring(dateIndex + dateStr.length).trim();
+                
+                const firstComma = preDate.indexOf(',');
+                if (firstComma === -1) return;
+                
+                const tableName = preDate.substring(0, firstComma).trim();
+                let rowName = preDate.substring(firstComma + 1).trim();
+                if (rowName.endsWith(',')) rowName = rowName.slice(0, -1);
+                
+                let valueStr = postDate.replace(/^,/, '').replace(/["$,\s]/g, '');
+                let value = parseFloat(valueStr) || 0;
+
+                if (!monthlyData[dateStr]) {
+                monthlyData[dateStr] = {
+                    date: dateStr,
+                    leads: { total: 0, sales_opps: 0, sales_only: 0, service: 0, parts: 0, alerts: 0 },
+                    financials: { gross_profit: 0, units_sold: 0, ad_spend: 0 },
+                    inventory: { total: 0, new: 0, used: 0 },
+                    traffic: { visitors: 0, vdp_views: 0 },
+                    models: {},
+                    drivers: { sales: {}, service: {}, parts: {}, alerts: {} }
+                };
+                }
+                const m = monthlyData[dateStr];
+
+                if (tableName === 'All Lead Conversions') {
+                if (rowName === 'Sales') m.leads.sales_only += value;
+                if (rowName === 'Sales' || rowName === 'Finance') m.leads.sales_opps += value;
+                if (rowName === 'Service') m.leads.service += value;
+                if (rowName === 'Parts') m.leads.parts += value;
+                if (rowName === 'Return Shopper Alert') m.leads.alerts += value;
+                
+                if (['Sales', 'Finance', 'Service', 'Parts', 'Return Shopper Alert', 'General Inquiry', 'Fleet'].includes(rowName)) {
+                    m.leads.total += value;
+                }
+
+                let cat = null;
+                if (rowName.startsWith('Sales >') || rowName.startsWith('Finance >')) cat = 'sales';
+                else if (rowName.startsWith('Service >')) cat = 'service';
+                else if (rowName.startsWith('Parts >')) cat = 'parts';
+                else if (rowName.startsWith('Return Shopper Alert >')) cat = 'alerts';
+
+                if (cat) {
+                    const cleanName = rowName.split(' > ').slice(1).join(' > ');
+                    const isExcluded = EXCLUDED_PREFIXES.some(prefix => cleanName.startsWith(prefix) || cleanName === prefix);
+                    
+                    if (!isExcluded) {
+                    const type = classifyDriver(cleanName);
+                    if (!m.drivers[cat][cleanName]) m.drivers[cat][cleanName] = { value: 0, type };
+                    m.drivers[cat][cleanName].value += value;
+                    }
+                }
+                }
+
+                if (tableName === 'Vehicle Sales') {
+                if (rowName.includes('Total Gross Profit')) m.financials.gross_profit += value;
+                if (rowName.includes('Units Sold')) m.financials.units_sold += value;
+                }
+                if (tableName === 'Digital Advertising Spend') m.financials.ad_spend += value;
+
+                if (tableName === 'Inventory Stats (Totals)') {
+                if (rowName.includes('New Avg')) m.inventory.new += value;
+                if (rowName.includes('Used Avg')) m.inventory.used += value;
+                }
+                m.inventory.total = m.inventory.new + m.inventory.used;
+
+                if (tableName === 'Website Stats') {
+                if (rowName.includes('Visitors')) m.traffic.visitors += value;
+                if (rowName.includes('VDP Pageviews')) m.traffic.vdp_views += value;
+                }
+
+                const modelKeywords = ['RX', 'GX', 'ES', 'NX', 'IS', 'LX', 'TX', 'RZ', 'UX'];
+                modelKeywords.forEach(mod => {
+                if (rowName.includes(mod) && tableName === 'All Lead Conversions' && value > 0) {
+                    m.models[mod] = (m.models[mod] || 0) + value;
+                }
+                });
+            });
+
+            return Object.values(monthlyData).sort((a, b) => new Date(a.date) - new Date(b.date)).map(m => {
+                const dateObj = new Date(m.date);
+                const monthShort = dateObj.toLocaleString('default', { month: 'short' });
+                
+                const processDrivers = (map) => Object.entries(map).map(([name, d]) => ({ name, value: d.value, type: d.type })).sort((a, b) => b.value - a.value);
+                const processModels = (map) => Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+                return {
+                month: monthShort,
+                fullDate: m.date,
+                leads: m.leads,
+                financials: m.financials,
+                inventory: m.inventory,
+                traffic: m.traffic,
+                models: processModels(m.models),
+                details: {
+                    sales: processDrivers(m.drivers.sales),
+                    service: processDrivers(m.drivers.service),
+                    parts: processDrivers(m.drivers.parts),
+                    alerts: processDrivers(m.drivers.alerts)
+                }
+                };
+            });
+        };
+
+        // --- INITIAL DATA ---
+        const INITIAL_DATA = [
+            {"month": "Jan", "fullDate": "2025-01-01", "leads": {"total": 185.0, "sales_opps": 148.0, "sales_only": 119.0, "service": 28.0, "parts": 1.0, "alerts": 0.0}, "financials": {"gross_profit": 0.0, "units_sold": 14.0, "ad_spend": 0.0}, "inventory": {"total": 353.0, "new": 192.0, "used": 161.0}, "traffic": {"visitors": 24012.0, "vdp_views": 1845.0}, "models": [{"name": "RX", "value": 4.0}, {"name": "NX", "value": 2.0}], "details": {"sales": [{"name": "VDP", "value": 63.0, "type": "form"}, {"name": "SRP", "value": 58.0, "type": "form"}, {"name": "Get ePrice", "value": 48.0, "type": "form"}, {"name": "Confirm Availability", "value": 33.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 29.0, "type": "form"}, {"name": "Price Drop", "value": 26.0, "type": "form"}], "service": [{"name": "Service Appointment", "value": 11.0, "type": "form"}, {"name": "Send to Mobile - service coupon", "value": 6.0, "type": "form"}], "parts": [], "alerts": []}},
+            {"month": "Feb", "fullDate": "2025-02-01", "leads": {"total": 194.0, "sales_opps": 157.0, "sales_only": 115.0, "service": 11.0, "parts": 0.0, "alerts": 0.0}, "financials": {"gross_profit": 0.0, "units_sold": 14.0, "ad_spend": 0.0}, "inventory": {"total": 398.0, "new": 255.0, "used": 143.0}, "traffic": {"visitors": 21045.0, "vdp_views": 1530.0}, "models": [{"name": "RX", "value": 3.0}, {"name": "ES", "value": 1.0}], "details": {"sales": [{"name": "Get ePrice", "value": 82.0, "type": "form"}, {"name": "VDP", "value": 80.0, "type": "form"}, {"name": "SRP", "value": 51.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 40.0, "type": "form"}, {"name": "Price Drop", "value": 26.0, "type": "form"}, {"name": "Schedule Estimate", "value": 2.0, "type": "form"}, {"name": "Search", "value": 1.0, "type": "form"}, {"name": "Finance Department", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "service": [{"name": "Ask a Tech", "value": 5.0, "type": "form"}, {"name": "Send to Mobile - service coupon", "value": 4.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "parts": [], "alerts": []}},
+            {"month": "Mar", "fullDate": "2025-03-01", "leads": {"total": 295.0, "sales_opps": 230.0, "sales_only": 177.0, "service": 10.0, "parts": 2.0, "alerts": 0.0}, "financials": {"gross_profit": 0.0, "units_sold": 21.0, "ad_spend": 0.0}, "inventory": {"total": 264.0, "new": 123.0, "used": 141.0}, "traffic": {"visitors": 25300.0, "vdp_views": 2100.0}, "models": [{"name": "RX", "value": 5.0}, {"name": "GX", "value": 2.0}], "details": {"sales": [{"name": "SRP", "value": 112.0, "type": "form"}, {"name": "Get ePrice", "value": 80.0, "type": "form"}, {"name": "Contact Us", "value": 61.0, "type": "form"}, {"name": "VDP", "value": 59.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 53.0, "type": "form"}, {"name": "Price Drop", "value": 17.0, "type": "form"}, {"name": "Auto", "value": 6.0, "type": "form"}, {"name": "Schedule Test Drive", "value": 2.0, "type": "form"}, {"name": "Build Your Car - Request", "value": 1.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}, {"name": "Do I Qualify", "value": 1.0, "type": "form"}, {"name": "Military Discount", "value": 1.0, "type": "form"}, {"name": "Reserve Your New Lexus Today!", "value": 1.0, "type": "form"}, {"name": "Schedule Estimate", "value": 1.0, "type": "form"}, {"name": "Search", "value": 1.0, "type": "form"}], "service": [{"name": "Home", "value": 1.0, "type": "form"}, {"name": "Send to Mobile - service coupon", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 2.0, "type": "form"}], "alerts": []}},
+            {"month": "Apr", "fullDate": "2025-04-01", "leads": {"total": 280.0, "sales_opps": 209.0, "sales_only": 162.0, "service": 19.0, "parts": 2.0, "alerts": 0.0}, "financials": {"gross_profit": 0.0, "units_sold": 19.0, "ad_spend": 0.0}, "inventory": {"total": 267.0, "new": 123.0, "used": 144.0}, "traffic": {"visitors": 23400.0, "vdp_views": 1980.0}, "models": [{"name": "GX", "value": 1.0}], "details": {"sales": [{"name": "SRP", "value": 91.0, "type": "form"}, {"name": "Get ePrice", "value": 74.0, "type": "form"}, {"name": "VDP", "value": 61.0, "type": "form"}, {"name": "eAutoAppraise - Trade", "value": 46.0, "type": "vendor"}, {"name": "Credit Confirm - Finance", "value": 46.0, "type": "form"}, {"name": "Price Drop", "value": 28.0, "type": "form"}, {"name": "Everest DR", "value": 3.0, "type": "vendor"}, {"name": "Search", "value": 2.0, "type": "form"}, {"name": "Auto", "value": 1.0, "type": "form"}, {"name": "Confirm Availability", "value": 1.0, "type": "form"}, {"name": "Lexus GX", "value": 1.0, "type": "form"}, {"name": "Priorities for Life", "value": 1.0, "type": "form"}, {"name": "eAutoAppraise - Sell", "value": 1.0, "type": "vendor"}, {"name": "Contact Us", "value": 1.0, "type": "form"}], "service": [{"name": "Send to Mobile - service coupon", "value": 5.0, "type": "form"}, {"name": "Ask a Tech", "value": 3.0, "type": "form"}, {"name": "Vehicle Recall Request", "value": 1.0, "type": "form"}, {"name": "SRP", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 2.0, "type": "form"}], "alerts": []}},
+            {"month": "May", "fullDate": "2025-05-01", "leads": {"total": 204.0, "sales_opps": 173.0, "sales_only": 142.0, "service": 15.0, "parts": 2.0, "alerts": 0.0}, "financials": {"gross_profit": 0.0, "units_sold": 16.0, "ad_spend": 0.0}, "inventory": {"total": 271.0, "new": 137.0, "used": 134.0}, "traffic": {"visitors": 26100.0, "vdp_views": 2200.0}, "models": [], "details": {"sales": [{"name": "VDP", "value": 72.0, "type": "form"}, {"name": "SRP", "value": 60.0, "type": "form"}, {"name": "Get ePrice", "value": 54.0, "type": "form"}, {"name": "eAutoAppraise - Trade", "value": 43.0, "type": "vendor"}, {"name": "Credit Confirm - Finance", "value": 30.0, "type": "form"}, {"name": "Price Drop", "value": 22.0, "type": "form"}, {"name": "Everest DR", "value": 13.0, "type": "vendor"}, {"name": "Schedule Test Drive", "value": 3.0, "type": "form"}, {"name": "Home", "value": 2.0, "type": "form"}, {"name": "Schedule Estimate", "value": 2.0, "type": "form"}, {"name": "Auto", "value": 1.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}], "service": [{"name": "Send to Mobile - service coupon", "value": 3.0, "type": "form"}, {"name": "Ask a Tech", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 1.0, "type": "form"}, {"name": "SRP", "value": 1.0, "type": "form"}], "alerts": []}},
+            {"month": "Jun", "fullDate": "2025-06-01", "leads": {"total": 329.0, "sales_opps": 262.0, "sales_only": 232.0, "service": 14.0, "parts": 4.0, "alerts": 43.0}, "financials": {"gross_profit": 0.0, "units_sold": 45.0, "ad_spend": 0.0}, "inventory": {"total": 259.0, "new": 130.0, "used": 129.0}, "traffic": {"visitors": 28500.0, "vdp_views": 3100.0}, "models": [], "details": {"sales": [{"name": "VDP", "value": 110.0, "type": "form"}, {"name": "SRP", "value": 99.0, "type": "form"}, {"name": "eAutoAppraise - Trade", "value": 91.0, "type": "vendor"}, {"name": "Get ePrice", "value": 90.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 30.0, "type": "form"}, {"name": "Price Drop", "value": 18.0, "type": "form"}, {"name": "Everest DR", "value": 11.0, "type": "vendor"}, {"name": "Schedule Test Drive", "value": 7.0, "type": "form"}, {"name": "Home", "value": 4.0, "type": "form"}, {"name": "Schedule Estimate", "value": 2.0, "type": "form"}, {"name": "Search", "value": 2.0, "type": "form"}, {"name": "Auto", "value": 1.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}, {"name": "eAutoAppraise - Sell", "value": 1.0, "type": "vendor"}], "service": [{"name": "Ask a Tech", "value": 4.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}, {"name": "Vehicle Recall Request", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 3.0, "type": "form"}, {"name": "Send to Mobile - parts coupon", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 43.0, "type": "form"}, {"name": "VDP", "value": 26.0, "type": "form"}, {"name": "SRP", "value": 15.0, "type": "form"}]}},
+            {"month": "Jul", "fullDate": "2025-07-01", "leads": {"total": 355.0, "sales_opps": 260.0, "sales_only": 227.0, "service": 18.0, "parts": 1.0, "alerts": 74.0}, "financials": {"gross_profit": 61700.0, "units_sold": 52.0, "ad_spend": 0.0}, "inventory": {"total": 265.0, "new": 131.0, "used": 134.0}, "traffic": {"visitors": 29800.0, "vdp_views": 3400.0}, "models": [], "details": {"sales": [{"name": "VDP", "value": 115.0, "type": "form"}, {"name": "Get ePrice", "value": 91.0, "type": "form"}, {"name": "SRP", "value": 88.0, "type": "form"}, {"name": "eAutoAppraise - Trade", "value": 72.0, "type": "vendor"}, {"name": "Credit Confirm - Finance", "value": 32.0, "type": "form"}, {"name": "Price Drop", "value": 19.0, "type": "form"}, {"name": "Everest DR", "value": 16.0, "type": "vendor"}, {"name": "Schedule Test Drive", "value": 13.0, "type": "form"}, {"name": "Auto", "value": 8.0, "type": "form"}, {"name": "Build Your Car - Request", "value": 2.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "service": [{"name": "Service Appointment", "value": 6.0, "type": "form"}, {"name": "Ask a Tech", "value": 2.0, "type": "form"}, {"name": "Send to Mobile - service coupon", "value": 2.0, "type": "form"}, {"name": "Service Department", "value": 2.0, "type": "form"}, {"name": "Auto", "value": 1.0, "type": "form"}, {"name": "Meet Our Staff", "value": 1.0, "type": "form"}, {"name": "VDP", "value": 1.0, "type": "form"}], "parts": [{"name": "Email Message", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 74.0, "type": "form"}, {"name": "VDP", "value": 58.0, "type": "form"}, {"name": "SRP", "value": 13.0, "type": "form"}]}},
+            {"month": "Aug", "fullDate": "2025-08-01", "leads": {"total": 550.0, "sales_opps": 310.0, "sales_only": 279.0, "service": 75.0, "parts": 15.0, "alerts": 144.0}, "financials": {"gross_profit": 42006.0, "units_sold": 68.0, "ad_spend": 0.0}, "inventory": {"total": 275.0, "new": 134.0, "used": 141.0}, "traffic": {"visitors": 32100.0, "vdp_views": 4100.0}, "models": [{"name": "RX", "value": 2.0}], "details": {"sales": [{"name": "VDP", "value": 132.0, "type": "form"}, {"name": "SRP", "value": 118.0, "type": "form"}, {"name": "Get ePrice", "value": 110.0, "type": "form"}, {"name": "eAutoAppraise - Trade", "value": 73.0, "type": "vendor"}, {"name": "Credit Confirm - Finance", "value": 29.0, "type": "form"}, {"name": "Price Drop", "value": 23.0, "type": "form"}, {"name": "Everest DR", "value": 21.0, "type": "vendor"}, {"name": "Auto", "value": 12.0, "type": "form"}, {"name": "Schedule Test Drive", "value": 7.0, "type": "form"}, {"name": "404 - Page Not Found", "value": 5.0, "type": "form"}, {"name": "Schedule Estimate", "value": 3.0, "type": "form"}, {"name": "Search", "value": 3.0, "type": "form"}, {"name": "2025 Lexus RX", "value": 2.0, "type": "form"}, {"name": "Contact Us", "value": 2.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "service": [{"name": "Auto", "value": 3.0, "type": "form"}, {"name": "Home", "value": 3.0, "type": "form"}, {"name": "Service Appointment", "value": 3.0, "type": "form"}, {"name": "VDP", "value": 3.0, "type": "form"}, {"name": "404 - Page Not Found", "value": 2.0, "type": "form"}, {"name": "Service Department", "value": 2.0, "type": "form"}, {"name": "Ask a Tech", "value": 1.0, "type": "form"}, {"name": "Contact Us", "value": 1.0, "type": "form"}, {"name": "Vehicle Recall Request", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 4.0, "type": "form"}, {"name": "Auto", "value": 2.0, "type": "form"}, {"name": "VDP", "value": 2.0, "type": "form"}, {"name": "Send to Mobile - parts coupon", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 144.0, "type": "form"}, {"name": "VDP", "value": 98.0, "type": "form"}, {"name": "SRP", "value": 34.0, "type": "form"}]}},
+            {"month": "Sep", "fullDate": "2025-09-01", "leads": {"total": 427.0, "sales_opps": 193.0, "sales_only": 161.0, "service": 53.0, "parts": 7.0, "alerts": 168.0}, "financials": {"gross_profit": 85460.0, "units_sold": 35.0, "ad_spend": 0.0}, "inventory": {"total": 311.0, "new": 149.0, "used": 162.0}, "traffic": {"visitors": 26500.0, "vdp_views": 2900.0}, "models": [], "details": {"sales": [{"name": "Get ePrice", "value": 77.0, "type": "form"}, {"name": "VDP", "value": 72.0, "type": "form"}, {"name": "SRP", "value": 60.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 32.0, "type": "form"}, {"name": "Price Drop", "value": 19.0, "type": "form"}, {"name": "Schedule Test Drive", "value": 12.0, "type": "form"}, {"name": "TradePending", "value": 11.0, "type": "vendor"}, {"name": "Everest DR", "value": 9.0, "type": "vendor"}, {"name": "eAutoAppraise - Trade", "value": 5.0, "type": "vendor"}, {"name": "Home", "value": 2.0, "type": "form"}, {"name": "Search", "value": 1.0, "type": "form"}, {"name": "eAutoAppraise - Sell", "value": 1.0, "type": "vendor"}], "service": [{"name": "Ask a Tech", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 3.0, "type": "form"}, {"name": "Send to Mobile - parts coupon", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 168.0, "type": "form"}, {"name": "VDP", "value": 86.0, "type": "form"}, {"name": "SRP", "value": 65.0, "type": "form"}]}},
+            {"month": "Oct", "fullDate": "2025-10-01", "leads": {"total": 634.0, "sales_opps": 307.0, "sales_only": 273.0, "service": 98.0, "parts": 13.0, "alerts": 200.0}, "financials": {"gross_profit": 530862.0, "units_sold": 85.0, "ad_spend": 0.0}, "inventory": {"total": 291.0, "new": 150.0, "used": 141.0}, "traffic": {"visitors": 34200.0, "vdp_views": 4500.0}, "models": [{"name": "RX", "value": 18.0}, {"name": "GX", "value": 12.0}, {"name": "TX", "value": 3.0}], "details": {"sales": [{"name": "TradePending", "value": 115.0, "type": "vendor"}, {"name": "VDP", "value": 109.0, "type": "form"}, {"name": "Get ePrice", "value": 96.0, "type": "form"}, {"name": "SRP", "value": 55.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 33.0, "type": "form"}, {"name": "Everest DR", "value": 23.0, "type": "vendor"}, {"name": "Price Drop", "value": 18.0, "type": "form"}, {"name": "Schedule Test Drive", "value": 4.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 3.0, "type": "form"}, {"name": "Home", "value": 2.0, "type": "form"}, {"name": "Auto", "value": 1.0, "type": "form"}, {"name": "Build Your Car", "value": 1.0, "type": "form"}, {"name": "Search", "value": 1.0, "type": "form"}], "service": [{"name": "Schedule Service", "value": 33.0, "type": "form"}, {"name": "Home", "value": 4.0, "type": "form"}, {"name": "Service Appointment", "value": 3.0, "type": "form"}, {"name": "Ask a Tech", "value": 2.0, "type": "form"}, {"name": "Service Department", "value": 1.0, "type": "form"}, {"name": "Vehicle Recall Request", "value": 1.0, "type": "form"}, {"name": "SRP", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 5.0, "type": "form"}, {"name": "Parts Department", "value": 2.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 200.0, "type": "form"}, {"name": "VDP", "value": 117.0, "type": "form"}, {"name": "SRP", "value": 62.0, "type": "form"}]}},
+            {"month": "Nov", "fullDate": "2025-11-01", "leads": {"total": 607.0, "sales_opps": 303.0, "sales_only": 274.0, "service": 68.0, "parts": 12.0, "alerts": 218.0}, "financials": {"gross_profit": 1160826.0, "units_sold": 88.0, "ad_spend": 0.0}, "inventory": {"total": 273.0, "new": 144.0, "used": 129.0}, "traffic": {"visitors": 33100.0, "vdp_views": 4300.0}, "models": [{"name": "RX", "value": 16.0}, {"name": "GX", "value": 11.0}, {"name": "TX", "value": 5.0}], "details": {"sales": [{"name": "TradePending", "value": 109.0, "type": "vendor"}, {"name": "Get ePrice", "value": 95.0, "type": "form"}, {"name": "VDP", "value": 86.0, "type": "form"}, {"name": "SRP", "value": 55.0, "type": "form"}, {"name": "Credit Confirm - Finance", "value": 29.0, "type": "form"}, {"name": "Black Friday Starts Now | Schedule Yo...", "value": 18.0, "type": "form"}, {"name": "Price Drop", "value": 15.0, "type": "form"}, {"name": "Schedule Test Drive", "value": 10.0, "type": "form"}, {"name": "Everest DR", "value": 9.0, "type": "vendor"}, {"name": "Black Friday Starts Now - Unlock Your...", "value": 1.0, "type": "form"}, {"name": "Build Your Car - Request", "value": 1.0, "type": "form"}, {"name": "Build Your Car - Save", "value": 1.0, "type": "form"}, {"name": "Home", "value": 1.0, "type": "form"}, {"name": "Schedule Estimate", "value": 1.0, "type": "form"}, {"name": "Service Loyalty Offer", "value": 1.0, "type": "form"}], "service": [{"name": "Vehicle Recall Request", "value": 3.0, "type": "form"}, {"name": "SRP", "value": 2.0, "type": "form"}, {"name": "Ask a Tech", "value": 1.0, "type": "form"}, {"name": "Service Appointment", "value": 1.0, "type": "form"}], "parts": [{"name": "Order Parts", "value": 6.0, "type": "form"}, {"name": "Email Message", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 218.0, "type": "form"}, {"name": "VDP", "value": 126.0, "type": "form"}, {"name": "SRP", "value": 73.0, "type": "form"}]}},
+            {"month": "Dec", "fullDate": "2025-12-01", "leads": {"total": 170.0, "sales_opps": 83.0, "sales_only": 71.0, "service": 19.0, "parts": 2.0, "alerts": 62.0}, "financials": {"gross_profit": 11858.0, "units_sold": 0.0, "ad_spend": 0.0}, "inventory": {"total": 286.0, "new": 171.0, "used": 115.0}, "traffic": {"visitors": 0.0, "vdp_views": 0.0}, "models": [], "details": {"sales": [{"name": "Get ePrice", "value": 39.0, "type": "form"}, {"name": "VDP", "value": 29.0, "type": "form"}, {"name": "SRP", "value": 22.0, "type": "form"}, {"name": "TradePending", "value": 18.0, "type": "vendor"}, {"name": "Credit Confirm - Finance", "value": 12.0, "type": "form"}, {"name": "Everest DR", "value": 7.0, "type": "vendor"}, {"name": "Build Your Car - Request", "value": 1.0, "type": "form"}, {"name": "Price Drop", "value": 1.0, "type": "form"}, {"name": "Schedule Estimate", "value": 1.0, "type": "form"}], "service": [{"name": "Ask a Tech", "value": 2.0, "type": "form"}, {"name": "SRP", "value": 1.0, "type": "form"}], "parts": [{"name": "Send to Mobile - parts coupon", "value": 1.0, "type": "form"}], "alerts": [{"name": "Return Shopper Alert", "value": 62.0, "type": "form"}, {"name": "VDP", "value": 41.0, "type": "form"}, {"name": "SRP", "value": 18.0, "type": "form"}]}}
+        ];
+
+        const App = () => {
+            const [data, setData] = useState(INITIAL_DATA);
+            const [selectedMonthIndex, setSelectedMonthIndex] = useState(INITIAL_DATA.length > 1 ? INITIAL_DATA.length - 2 : 0);
+            const [viewScope, setViewScope] = useState('monthly');
+            const [chartMode, setChartMode] = useState('leads'); 
+            const [isDetailOpen, setIsDetailOpen] = useState(false);
+            const [detailTab, setDetailTab] = useState('sales');
+            const [selectedDriver, setSelectedDriver] = useState(null);
+            
+            const fileInputRef = useRef(null);
+
+            useEffect(() => {
+                if (data.length > 1) {
+                setSelectedMonthIndex(data.length - 2);
+                } else if (data.length > 0) {
+                setSelectedMonthIndex(data.length - 1);
+                }
+            }, [data]);
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    const parsed = parseCSV(text);
+                    if (parsed.length > 0) {
+                    setData(parsed);
+                    }
+                };
+                reader.readAsText(file);
+                }
+            };
+
+            const currentData = data[selectedMonthIndex] || data[0];
+
+            const ytdData = useMemo(() => {
+                const subset = data.slice(0, selectedMonthIndex + 1);
+                const totals = subset.reduce((acc, curr) => ({
+                sales_opps: acc.sales_opps + curr.leads.sales_opps,
+                sales_only: acc.sales_only + (curr.leads.sales_only || 0),
+                total_leads: acc.total_leads + curr.leads.total,
+                service: acc.service + curr.leads.service,
+                parts: acc.parts + curr.leads.parts,
+                alerts: acc.alerts + curr.leads.alerts,
+                gross_profit: acc.gross_profit + curr.financials.gross_profit,
+                units_sold: acc.units_sold + curr.financials.units_sold,
+                ad_spend: acc.ad_spend + curr.financials.ad_spend,
+                visitors: (acc.visitors || 0) + curr.traffic.visitors,
+                vdp_views: (acc.vdp_views || 0) + curr.traffic.vdp_views
+                }), { sales_opps: 0, sales_only: 0, total_leads: 0, service: 0, parts: 0, alerts: 0, gross_profit: 0, units_sold: 0, ad_spend: 0, visitors: 0, vdp_views: 0 });
+
+                const aggDrivers = { sales: {}, service: {}, parts: {}, alerts: {} };
+                subset.forEach(m => {
+                ['sales', 'service', 'parts', 'alerts'].forEach(cat => {
+                    if(m.details[cat]) {
+                        m.details[cat].forEach(d => {
+                        if (!aggDrivers[cat][d.name]) aggDrivers[cat][d.name] = { value: 0, type: d.type };
+                        aggDrivers[cat][d.name].value += d.value;
+                        });
+                    }
+                });
+                });
+                
+                // Aggregating models for YTD
+                const aggModels = {};
+                subset.forEach(m => {
+                    if (m.models) {
+                        m.models.forEach(mod => {
+                            if (!aggModels[mod.name]) aggModels[mod.name] = 0;
+                            aggModels[mod.name] += mod.value;
+                        });
+                    }
+                });
+                const sortModels = Object.entries(aggModels).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+                const sortDrivers = (map) => Object.entries(map).map(([name, d]) => ({ name, value: d.value, type: d.type })).sort((a, b) => b.value - a.value);
+
+                return {
+                ...totals,
+                models: sortModels,
+                details: {
+                    sales: sortDrivers(aggDrivers.sales),
+                    service: sortDrivers(aggDrivers.service),
+                    parts: sortDrivers(aggDrivers.parts),
+                    alerts: sortDrivers(aggDrivers.alerts)
+                }
+                };
+            }, [selectedMonthIndex, data]);
+
+            const displayLeads = viewScope === 'ytd' ? ytdData.sales_opps : currentData.leads.sales_opps;
+            // Card 2: Sales Forms (Sales Only)
+            const displaySalesForms = viewScope === 'ytd' ? ytdData.sales_only : currentData.leads.sales_only;
+            // Card 3: VDP Views
+            const displayVdp = viewScope === 'ytd' ? ytdData.vdp_views : currentData.traffic.vdp_views;
+            // Card 4: Top Model
+            const topModel = viewScope === 'ytd' ? (ytdData.models[0] || {name: 'N/A', value: 0}) : (currentData.models[0] || {name: 'N/A', value: 0});
+            
+            const breakdownList = viewScope === 'ytd' ? ytdData.details[detailTab] : currentData.details[detailTab];
+            const breakdownCounts = viewScope === 'ytd' 
+                ? { sales: ytdData.sales_opps, service: ytdData.service, parts: ytdData.parts, alerts: ytdData.alerts }
+                : { sales: currentData.leads.sales_opps, service: currentData.leads.service, parts: currentData.leads.parts, alerts: currentData.leads.alerts };
+
+            const formatNum = (val) => new Intl.NumberFormat('en-US').format(val);
+
+            const driverTrendData = useMemo(() => {
+                if (!selectedDriver) return [];
+                return data.slice(0, selectedMonthIndex + 1).map(m => {
+                const match = m.details[detailTab]?.find(d => d.name === selectedDriver.name);
+                return { month: m.month, value: match ? match.value : 0 };
+                });
+            }, [selectedDriver, data, selectedMonthIndex, detailTab]);
+
+            const driverStats = useMemo(() => {
+                if (driverTrendData.length === 0) return { total: 0, avg: 0, best: 0 };
+                const total = driverTrendData.reduce((acc, curr) => acc + curr.value, 0);
+                const avg = total / driverTrendData.length;
+                const best = Math.max(...driverTrendData.map(d => d.value));
+                return { total, avg: avg.toFixed(1), best };
+            }, [driverTrendData]);
+
+            const chartData = data.slice(0, selectedMonthIndex + 1);
+
+            useEffect(() => {
+                if (isDetailOpen) document.body.style.overflow = 'hidden';
+                else document.body.style.overflow = 'unset';
+                return () => { document.body.style.overflow = 'unset'; }
+            }, [isDetailOpen]);
+
+            const closeModal = () => {
+                setIsDetailOpen(false);
+                setSelectedDriver(null);
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+                <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 shadow-2xl">
+                    <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-full flex items-center justify-center shadow-lg shadow-yellow-900/20 shrink-0">
+                        <span className="text-white font-bold text-xl">L</span>
+                        </div>
+                        <div>
+                        <h1 className="text-xl font-bold tracking-tight text-white">Priority Lexus</h1>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">Executive View</span>
+                        </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="hidden sm:block">
+                        <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                        <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded border border-slate-700 transition-colors">
+                            <UploadCloud size={14} /> Import
+                        </button>
+                        </div>
+                        <div className="bg-slate-900 p-1 rounded-lg border border-slate-700 flex text-xs font-medium">
+                            <button onClick={() => setViewScope('monthly')} className={`px-3 py-1.5 rounded transition-all ${viewScope === 'monthly' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>Monthly</button>
+                            <button onClick={() => setViewScope('ytd')} className={`px-3 py-1.5 rounded transition-all ${viewScope === 'ytd' ? 'bg-yellow-600 text-yellow-400' : 'text-slate-400 hover:text-white'}`}>YTD</button>
+                        </div>
+                        <div className="hidden md:flex bg-slate-800/50 p-1 rounded-lg border border-slate-700 max-w-[200px] overflow-x-auto scrollbar-hide">
+                            {data.map((d, idx) => {
+                            return (
+                                <button key={d.month} onClick={() => setSelectedMonthIndex(idx)} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${idx === selectedMonthIndex ? 'bg-slate-700 text-white shadow-sm ring-1 ring-slate-600' : 'text-slate-400 hover:text-white'}`}>
+                                {d.month}
+                                </button>
+                            );
+                            })}
+                        </div>
+                    </div>
+                    </div>
+                </header>
+
+                <main className="max-w-7xl mx-auto px-4 py-8 space-y-8 pb-40"> 
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Card 1: Sales Opps */}
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{viewScope === 'ytd' ? 'YTD' : 'Monthly'} Sales Opps</p>
+                            <Target size={16} className="text-emerald-400"/>
+                        </div>
+                        <h2 className="text-3xl font-bold text-white">{formatNum(displayLeads)}</h2>
+                        <p className="text-xs text-slate-500 mt-1">Qualified Leads</p>
+                    </div>
+
+                    {/* Card 2: Sales Forms (Sales Only) */}
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-yellow-500 text-xs font-medium uppercase tracking-wider">{viewScope === 'ytd' ? 'YTD' : 'Monthly'} Sales Forms</p>
+                            <FileText size={16} className="text-yellow-500"/>
+                        </div>
+                        <h2 className="text-3xl font-bold text-white">{formatNum(displaySalesForms)}</h2>
+                        <p className="text-xs text-slate-500 mt-1">Excl. Finance & Service</p>
+                    </div>
+
+                    {/* Card 3: VDP Views */}
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{viewScope === 'ytd' ? 'YTD' : 'Monthly'} VDP Views</p>
+                            <MousePointerClick size={16} className="text-blue-400"/>
+                        </div>
+                        <h2 className="text-3xl font-bold text-white">{formatNum(displayVdp)}</h2>
+                        <p className="text-xs text-slate-500 mt-1">Vehicle Engagement</p>
+                    </div>
+
+                    {/* Card 4: Top Model */}
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Top Model Demand</p>
+                            <Car size={16} className="text-purple-400"/>
+                        </div>
+                        <h2 className="text-3xl font-bold text-white">Lexus {topModel.name}</h2>
+                        <p className="text-xs text-slate-500 mt-1">{formatNum(topModel.value)} Inquiries</p>
+                    </div>
+                    </div>
+
+                    {/* CHART */}
+                    <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white">Performance Trends</h3>
+                            <p className="text-sm text-slate-400">Progression Analysis</p>
+                        </div>
+                        <div className="bg-slate-900 p-1 rounded-lg border border-slate-700 flex text-xs font-medium">
+                            <button onClick={() => setChartMode('leads')} className={`px-3 py-1.5 rounded ${chartMode === 'leads' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Sales Opps</button>
+                            <button onClick={() => setChartMode('units')} className={`px-3 py-1.5 rounded ${chartMode === 'units' ? 'bg-yellow-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Total Forms</button>
+                        </div>
+                    </div>
+                    <div className="h-[350px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                <defs>
+                                <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={COLORS.gold} stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor={COLORS.gold} stopOpacity={0}/>
+                                </linearGradient>
+                                <linearGradient id="colorUnits" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={COLORS.amber} stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor={COLORS.amber} stopOpacity={0}/>
+                                </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                <XAxis dataKey="month" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                                <YAxis yAxisId="left" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1E293B', borderColor: '#334155', color: '#F8FAFC' }} itemStyle={{ color: '#F8FAFC' }} labelStyle={{ color: '#94A3B8' }} />
+                                {chartMode === 'leads' && <Area yAxisId="left" type="monotone" dataKey="leads.sales_opps" name="Sales Opps" stroke={COLORS.gold} fill="url(#colorLeads)" strokeWidth={3} />}
+                                {chartMode === 'units' && <Area yAxisId="left" type="monotone" dataKey="leads.total" name="Total Forms" stroke={COLORS.amber} fill="url(#colorUnits)" strokeWidth={3} />}
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 relative flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-white">Drivers Breakdown</h3>
+                                <p className="text-xs text-slate-400">{viewScope === 'ytd' ? 'YTD' : 'Monthly'} Volume by Department</p>
+                            </div>
+                            <button onClick={() => setIsDetailOpen(true)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded transition-colors">
+                            View Full Report
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            {['sales', 'service', 'parts', 'alerts'].map((key) => {
+                                const style = TAB_STYLES[key];
+                                const val = breakdownCounts[key];
+                                return (
+                                    <div key={key} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors" onClick={() => { setDetailTab(key); setIsDetailOpen(true); }}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`${style.bgClass} p-2 rounded ${style.colorClass}`}><style.icon size={20}/></div>
+                                            <div>
+                                                <p className="text-sm font-medium text-white capitalize">{key === 'sales' ? 'Sales Opps' : key}</p>
+                                                <p className="text-xs text-slate-400">{formatNum(val)} Events</p>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={16} className="text-slate-500"/>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 flex flex-col">
+                        <h3 className="text-lg font-semibold text-white mb-6">Traffic Composition</h3>
+                        <div className="flex-1 flex flex-col justify-center space-y-6">
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm text-slate-400">
+                                    <span>Lead Mix</span>
+                                    <span>{formatNum(viewScope === 'ytd' ? ytdData.total_leads : currentData.leads.total)} Total Events</span>
+                                </div>
+                                <div className="w-full h-4 bg-slate-700 rounded-full flex overflow-hidden">
+                                    <div style={{ width: `${(breakdownCounts.sales / (viewScope === 'ytd' ? ytdData.total_leads : currentData.leads.total)) * 100}%` }} className="bg-emerald-500 h-full"></div>
+                                    <div style={{ width: `${(breakdownCounts.service / (viewScope === 'ytd' ? ytdData.total_leads : currentData.leads.total)) * 100}%` }} className="bg-blue-500 h-full"></div>
+                                    <div style={{ width: `${(breakdownCounts.alerts / (viewScope === 'ytd' ? ytdData.total_leads : currentData.leads.total)) * 100}%` }} className="bg-amber-500 h-full"></div>
+                                </div>
+                                <div className="flex flex-wrap gap-4 mt-2">
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-xs text-slate-400">Sales ({formatNum(breakdownCounts.sales)})</span></div>
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-xs text-slate-400">Service ({formatNum(breakdownCounts.service)})</span></div>
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div><span className="text-xs text-slate-400">Alerts ({formatNum(breakdownCounts.alerts)})</span></div>
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500"></div><span className="text-xs text-slate-400">Parts ({formatNum(breakdownCounts.parts)})</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+                </main>
+
+                {isDetailOpen && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
+                    <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                        <div className="relative transform overflow-hidden rounded-lg bg-slate-900 border border-slate-700 text-left shadow-xl transition-all w-full max-w-3xl my-8">
+                            
+                            <div className="bg-slate-800 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-slate-700">
+                                <div>
+                                    <h3 className="text-lg font-semibold leading-6 text-white">
+                                    {selectedDriver ? selectedDriver.name : "Department Drill-Down"}
+                                    </h3>
+                                    <p className="mt-1 text-sm text-slate-400">
+                                    {selectedDriver ? "Performance Profile" : `${viewScope === 'ytd' ? 'YTD' : currentData.month} Breakdown`}
+                                    </p>
+                                </div>
+                                <button onClick={closeModal} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
+                            </div>
+
+                            {!selectedDriver && (
+                            <div className="flex border-b border-slate-700 bg-slate-800/50 overflow-x-auto">
+                                {Object.keys(TAB_STYLES).map((key) => {
+                                    const style = TAB_STYLES[key];
+                                    const isActive = detailTab === key;
+                                    return (
+                                        <button key={key} onClick={() => setDetailTab(key)} className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${isActive ? `${style.borderClass} text-white bg-slate-700/50` : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                            <style.icon size={16} className={isActive ? style.colorClass : ''} />
+                                            {style.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            )}
+
+                            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar bg-slate-900 p-0">
+                                {selectedDriver ? (
+                                <div className="p-6">
+                                    <button 
+                                        onClick={() => setSelectedDriver(null)}
+                                        className="flex items-center text-xs text-slate-400 hover:text-white mb-6 transition-colors"
+                                    >
+                                        <ArrowLeft size={14} className="mr-1"/> Back to List
+                                    </button>
+
+                                    <div className="grid grid-cols-3 gap-4 mb-6">
+                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-center">
+                                            <p className="text-xs text-slate-400 mb-1">YTD Volume</p>
+                                            <p className="text-2xl font-bold text-white">{driverStats.total}</p>
+                                        </div>
+                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-center">
+                                            <p className="text-xs text-slate-400 mb-1">Monthly Avg</p>
+                                            <p className="text-2xl font-bold text-white">{driverStats.avg}</p>
+                                        </div>
+                                        <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-center">
+                                            <p className="text-xs text-slate-400 mb-1">Best Month</p>
+                                            <p className="text-2xl font-bold text-emerald-400">{driverStats.best}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-64 bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-white mb-4">Volume Trend</h4>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={driverTrendData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <XAxis dataKey="month" stroke="#94A3B8" fontSize={10} tickLine={false} axisLine={false} />
+                                            <Tooltip cursor={{fill: '#334155'}} contentStyle={{ backgroundColor: '#1E293B', borderColor: '#334155', color: '#F8FAFC' }} itemStyle={{ color: '#F8FAFC' }} />
+                                            <Bar dataKey="value" fill={COLORS.gold} radius={[4, 4, 0, 0]} name="Volume" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                                ) : (
+                                    breakdownList && breakdownList.length > 0 ? (
+                                        <table className="min-w-full divide-y divide-slate-800">
+                                            <thead className="bg-slate-950/50 sticky top-0">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Source / Tool</th>
+                                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Volume</th>
+                                                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Type</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-800">
+                                                {breakdownList.map((item, idx) => (
+                                                    <tr 
+                                                    key={idx} 
+                                                    onClick={() => setSelectedDriver(item)}
+                                                    className="hover:bg-slate-800/80 transition-colors cursor-pointer group"
+                                                    >
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-200 group-hover:text-white transition-colors">
+                                                            {item.name}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-white">
+                                                            {item.value}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                                            {item.type === 'vendor' ? (
+                                                                <span className="inline-flex items-center rounded-md bg-amber-400/10 px-2 py-1 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-400/20">Vendor</span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center rounded-md bg-slate-400/10 px-2 py-1 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-400/20">Form</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                                            <Filter size={48} className="mb-4 opacity-20" />
+                                            <p>No activity recorded</p>
+                                        </div>
+                                    )
+                                )}
+                            </div>
+
+                            <div className="bg-slate-800 px-4 py-3 sm:px-6 border-t border-slate-700 text-center">
+                                <p className="text-xs text-slate-500">
+                                {selectedDriver ? `Viewing performance for ${selectedDriver.name}` : `Showing all drivers for ${TAB_STYLES[detailTab].label}`}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                )}
+
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
